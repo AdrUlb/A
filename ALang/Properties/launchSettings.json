@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ALang": {
+      "commandName": "Project",
+      "commandLineArgs": "\"E:\\source\\alang_tests\\test.a\""
+    }
+  }
+}
