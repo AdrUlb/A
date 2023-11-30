@@ -1,5 +1,5 @@
 ﻿using ALang;
-using ALang.CodeGeneration;
+using ALang.Ir;
 using ALang.Lexing;
 using ALang.Parsing;
 
@@ -47,6 +47,6 @@ static void RunFile(string filePath)
 	/*foreach (var statement in statements)
 		Console.WriteLine(Util.StringifyStatement(statement));*/
 
-	var generator = new CodeGenerator(statements);
-	/*var code = */generator.Generate();
+	var irGen = new IrGenerator(statements);
+	irGen.Generate();
 }

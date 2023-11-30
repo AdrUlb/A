@@ -1,0 +1,25 @@
+/*func add(a: u16, b: u16): u16
+{
+	return a + b;
+}*/
+
+func fib(a: u16): u16
+{
+	if (a == 0)
+		return 0;
+
+	if (a == 1)
+		return 1;
+
+	return fib(a - 1) + fib(a - 2);
+}
+
+/*func printInt(value: u16)
+{
+	print(value);
+}*/
+
+func main()
+{
+	print(fib(4));
+}

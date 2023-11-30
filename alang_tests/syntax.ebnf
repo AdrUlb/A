@@ -1,0 +1,38 @@
+program = { declaration } ;
+
+declaration = functionDeclaration | variableDeclaration | statement ;
+functionDeclaration = "func", identifier, '(', [ identifier, ':', identifier, { ',', identifier, ':', identifier } ], ')', [ ':', identifier ], statement ;
+variableDeclaration = "var", identifier, ':', identifier, '=' expression, ';' ;
+
+statement = blockStatement | returnStatement | ifStatement | expressionStatement ;
+blockStatement = '{', { statement }, '}' ;
+returnStatement = "return" [ expression ] ';' ;
+ifStatement = "if", '(', expression, ')', statement
+expressionStatement = expression, ';' ;
+
+expression = assignmentExpression ;
+assignmentExpression = ( identifier, '=', expression ) | equalityExpression ;
+equalityExpression = addSubExpression { ( '==' | '!=' ) addSubExpression }
+addSubExpression = callExpression { ('+' | '-') callExpression } ;
+callExpression = primaryExpression, '(', [ expression, { ',', expression } ], ')' ;
+primaryExpression = identifier ;
+
+(* Tokens *)
+comment = ( '//', { ANYTHING }, '\n' ) | ('/*', ANYTHING, '*/');
+identifier = ( ASCII_ALPHA | '_' ), { ASCII_ALPHANUMERIC | '_' } ;
+whitespace = ' ' | '\t' | '\n' | '\r';
+numericLiteral = ASCII_NUMERIC, { ASCII_NUMERIC } ;
+
+(* Misc *)
+ASCII_ALPHANUMERIC = ASCII_ALPHA | ASCII_NUMERIC ;
+ASCII_ALPHA = ASCII_ALPHA_UPPER | ASCII_ALPHA_LOWER ;
+
+ASCII_ALPHA_UPPER =
+	'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' |
+	'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' ;
+ASCII_ALPHA_LOWER =
+	'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' |
+	'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' ;
+	
+ASCII_NUMERIC = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
+ANYTHING = ? any ASCII character ? ;

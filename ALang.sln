@@ -1,6 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ALang", "ALang\ALang.csproj", "{9C82A6BA-8D8E-48E4-AA76-D95F77FBD8FE}"
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34310.174
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ALang", "ALang\ALang.csproj", "{9C82A6BA-8D8E-48E4-AA76-D95F77FBD8FE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ALang.Parsing", "ALang.Parsing\ALang.Parsing.csproj", "{99F867AB-F77D-4E9F-9EE6-46952AB7A7D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ALang.Lexing", "ALang.Lexing\ALang.Lexing.csproj", "{70435968-328A-49D5-B951-97C332534146}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -12,5 +19,19 @@ Global
 		{9C82A6BA-8D8E-48E4-AA76-D95F77FBD8FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9C82A6BA-8D8E-48E4-AA76-D95F77FBD8FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9C82A6BA-8D8E-48E4-AA76-D95F77FBD8FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{99F867AB-F77D-4E9F-9EE6-46952AB7A7D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99F867AB-F77D-4E9F-9EE6-46952AB7A7D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99F867AB-F77D-4E9F-9EE6-46952AB7A7D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99F867AB-F77D-4E9F-9EE6-46952AB7A7D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{70435968-328A-49D5-B951-97C332534146}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{70435968-328A-49D5-B951-97C332534146}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{70435968-328A-49D5-B951-97C332534146}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{70435968-328A-49D5-B951-97C332534146}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C31D95DF-FE5F-485B-B81F-F9203DEABEDA}
 	EndGlobalSection
 EndGlobal

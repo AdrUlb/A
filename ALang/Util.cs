@@ -1,4 +1,3 @@
-using ALang.Lexing.Tokens;
 using ALang.Parsing.Declarations;
 using ALang.Parsing.Expressions;
 using ALang.Parsing.Statements;
@@ -13,29 +12,6 @@ internal static class Util
 		return value
 			.Replace("\n", "\\n")
 			.Replace("\t", "\\t");
-	}
-
-	public static string StringifyToken(Token token)
-	{
-		var builder = new StringBuilder().Append(token.GetType().Name).AppendLine(" {")
-			.Append(new string(' ', 4)).Append("Lexeme: \"").Append(token.Lexeme.Escape()).Append('"')
-			.AppendLine(",").Append(new string(' ', 4)).Append("Line: ").Append(token.SourceFileFragment.Line)
-			.AppendLine(",").Append(new string(' ', 4)).Append("Column: ").Append(token.SourceFileFragment.Column);
-
-		switch (token)
-		{
-			case ErrorToken t:
-				builder.AppendLine(",").Append(new string(' ', 4)).Append("Message: \"").Append(t.Message).Append('"');
-				break;
-			case KeywordToken t:
-				builder.AppendLine(",").Append(new string(' ', 4)).Append("Type: ").Append(t.Type);
-				break;
-			case PunctuatorToken t:
-				builder.AppendLine(",").Append(new string(' ', 4)).Append("Type: ").Append(t.Type);
-				break;
-		}
-
-		return builder.AppendLine().Append('}').ToString();
 	}
 
 	public static string StringifyStatement(Statement statement, int indentLevel = 0)
@@ -68,7 +44,7 @@ internal static class Util
 						indentLevel++;
 
 						builder.Append(new string(' ', indentLevel * 4)).Append("Name: \"").Append(s.Parameters[i].Name.Escape()).AppendLine("\",");
-						builder.Append(new string(' ', indentLevel * 4)).Append("Type: \"").Append(s.Parameters[i].Type.Escape()).AppendLine("\"");
+						builder.Append(new string(' ', indentLevel * 4)).Append("Type: \"").Append(s.Parameters[i].TypeName.Escape()).AppendLine("\"");
 
 						indentLevel--;
 
@@ -93,14 +69,14 @@ internal static class Util
 
 				break;
 			case VariableDeclaration s:
-			{
-				builder
-					.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Name: \"").Append(s.Name).Append('"')
-					.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Type: \"").Append(s.Type).Append('"')
-					.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Initializer: ").Append(StringifyExpression(s.Initializer, indentLevel));
+				{
+					builder
+						.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Name: \"").Append(s.Name).Append('"')
+						.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Type: \"").Append(s.TypeName).Append('"')
+						.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Initializer: ").Append(StringifyExpression(s.Initializer, indentLevel));
 
-				break;
-			}
+					break;
+				}
 			case BlockStatement s:
 				if (s.Statements.Count != 0)
 				{
@@ -126,6 +102,11 @@ internal static class Util
 				break;
 			case ExpressionStatement s:
 				builder.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Expression: ").Append(StringifyExpression(s.Expression, indentLevel));
+				break;
+			case IfStatement s:
+				builder
+					.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Condition: ").Append(StringifyExpression(s.Condition, indentLevel))
+					.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Body: ").Append(StringifyStatement(s.Body, indentLevel));
 				break;
 			case ReturnStatement s:
 				builder.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Value: ").Append(StringifyExpression(s.Value, indentLevel));
