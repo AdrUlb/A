@@ -137,7 +137,7 @@ internal static class Util
 				builder.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Operation: ").Append(e.Operation);
 				break;
 			case CallExpression e:
-				builder.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Expression: ").Append(StringifyExpression(e.Expression, indentLevel));
+				builder.AppendLine(",").Append(new string(' ', indentLevel * 4)).Append("Expression: ").Append(StringifyExpression(e.Target, indentLevel));
 
 				if (e.Arguments.Count != 0)
 				{

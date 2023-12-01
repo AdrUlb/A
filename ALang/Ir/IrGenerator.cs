@@ -2,20 +2,47 @@
 using ALang.Parsing.Declarations;
 using ALang.Parsing.Expressions;
 using ALang.Parsing.Statements;
+using System;
 using System.Collections.Frozen;
+using System.Net.Http.Headers;
 using System.Numerics;
 
 namespace ALang.Ir;
 
-internal enum IrType
+internal interface IrType
 {
-	// Temporary ambigious types that may not exist after the final type inference pass
-	Unknown,
-	Number,
 
-	Bool,
-	Nothing,
-	U16
+}
+
+internal struct UnknownIrType : IrType
+{
+	public override readonly string ToString() => "unknown";
+}
+internal struct IntegerIrType : IrType
+{
+	public bool Signed = true;
+	public int Bits = -1;
+
+	public IntegerIrType()
+	{
+
+	}
+
+	public IntegerIrType(bool signed, int bits)
+	{
+		Signed = signed;
+		Bits = bits;
+	}
+
+	public override readonly string ToString() => $"{(Signed ? 'i' : 'u')}{(Bits >= 0 ? Bits.ToString() : "?")}";
+}
+internal struct NothingIrType : IrType
+{
+	public override readonly string ToString() => "nothing";
+}
+internal struct BoolIrType : IrType
+{
+	public override readonly string ToString() => "bool";
 }
 
 internal abstract class IrInstruction()
@@ -23,21 +50,28 @@ internal abstract class IrInstruction()
 
 }
 
-internal sealed class AddInstruction(int leftSourceIndex, int rightSourceReg, int destReg) : IrInstruction
+internal sealed class AddInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
 {
-	public readonly int LeftSourceIndex = leftSourceIndex;
-	public readonly int RightSourceIndex = rightSourceReg;
+	public readonly int LeftSourceReg = leftSourceReg;
+	public readonly int RightSourceReg = rightSourceReg;
+	public readonly int DestReg = destReg;
+}
+
+internal sealed class SubtractInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
+{
+	public readonly int LeftSourceReg = leftSourceReg;
+	public readonly int RightSourceReg = rightSourceReg;
 	public readonly int DestReg = destReg;
 }
 
 internal sealed class CompareEqualInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
 {
-	public readonly int LeftSourceIndex = leftSourceReg;
-	public readonly int RightSourceIndex = rightSourceReg;
+	public readonly int LeftSourceReg = leftSourceReg;
+	public readonly int RightSourceReg = rightSourceReg;
 	public readonly int DestReg = destReg;
 }
 
-internal sealed class GetArgumentInstruction(int argumentIndex, int destReg) : IrInstruction
+internal sealed class StoreArgumentInstruction(int argumentIndex, int destReg) : IrInstruction
 {
 	public readonly int ArgumentIndex = argumentIndex;
 	public readonly int DestReg = destReg;
@@ -49,7 +83,7 @@ internal sealed class StoreConstInstruction(BigInteger value, int destReg) : IrI
 	public readonly int DestReg = destReg;
 }
 
-internal sealed class JumpIfTrueInstruction(int sourceReg) : IrInstruction
+internal sealed class JumpIfFalseInstruction(int sourceReg) : IrInstruction
 {
 	public int JumpOffset = 0;
 	public readonly int SourceReg = sourceReg;
@@ -58,6 +92,20 @@ internal sealed class JumpIfTrueInstruction(int sourceReg) : IrInstruction
 internal sealed class ReturnInstruction(int sourceReg) : IrInstruction
 {
 	public readonly int SourceReg = sourceReg;
+}
+
+internal sealed class CallFunctionInstruction(int funcIndex, int[] argRegIndices, int destReg) : IrInstruction
+{
+	public readonly int FuncIndex = funcIndex;
+	public readonly int[] ArgRegIndices = argRegIndices;
+	public readonly int DestReg = destReg;
+}
+
+internal sealed class CallFunctionByNameInstruction(string name, int[] argRegIndices, int destReg) : IrInstruction
+{
+	public readonly string Name = name;
+	public readonly int[] ArgRegIndices = argRegIndices;
+	public readonly int DestReg = destReg;
 }
 
 internal readonly struct IrFunctionParameter(string name, IrType type)
@@ -115,14 +163,16 @@ internal sealed class IrFunction(string name, IrType returnType, IrFunctionParam
 	}
 }
 
-internal sealed class IrGenerator(IEnumerable<Statement> statements)
+internal sealed class IrGenerator
 {
+	private const int defaultIntSize = 16;
+
 	private static readonly FrozenDictionary<string, IrType> _typeNames = new Dictionary<string, IrType>
 	{
-		{ "u16", IrType.U16 }
+		{ "u16", new IntegerIrType(false, 16) }
 	}.ToFrozenDictionary();
 
-	private readonly List<IrFunction> _functions = [];
+	internal readonly List<IrFunction> _functions = [];
 	private readonly Stack<IrScope> _scopeStack = new();
 
 	private IrScope? CurrentScope => _scopeStack.Count != 0 ? _scopeStack.Peek() : null;
@@ -132,7 +182,7 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 	private static IrType GetIrTypeByName(string? name)
 	{
 		if (name == null)
-			return IrType.Nothing;
+			return new NothingIrType();
 
 		if (!_typeNames.TryGetValue(name, out var returnType))
 			throw new NotImplementedException();
@@ -140,11 +190,36 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 		return returnType;
 	}
 
+	private int GetFunctionIndexByName(string name)
+	{
+		if (name == "print")
+			return -1;
+
+		for (var i = 0; i < _functions.Count; i++)
+		{
+			if (_functions[i].Name == name)
+				return i;
+		}
+
+		throw new($"Function '{name}' not found.");
+	}
+
+	IrFunction printFunc = new("print", new NothingIrType(), [new IrFunctionParameter("num", new IntegerIrType(false, 16))]);
+
+	private IrFunction GetFunctionByIndex(int índex)
+	{
+		return índex switch
+		{
+			-1 => printFunc,
+			_ => _functions[índex],
+		};
+	}
+
 	private void EnterScope() => _scopeStack.Push(new(CurrentScope));
 
 	private void LeaveScope() => _scopeStack.Pop();
 
-	public void Generate()
+	public void Generate(IEnumerable<Statement> statements)
 	{
 		foreach (var statement in statements)
 		{
@@ -169,7 +244,7 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 							var registerIndex = _currentFunction.Registers.Count;
 							_currentFunction.Registers.Add(type);
 							CurrentScope!.DeclareVariable(param.Name, registerIndex);
-							_currentFunction.Instructions.Add(new GetArgumentInstruction(i, registerIndex));
+							_currentFunction.Instructions.Add(new StoreArgumentInstruction(i, registerIndex));
 						}
 
 						GenerateStatement(s.Body);
@@ -183,6 +258,11 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 					throw new NotImplementedException(Util.StringifyStatement(statement));
 			}
 		}
+
+		ResolveFunctionReferences();
+
+		while (InferTypes())
+			;
 	}
 
 	private void GenerateStatement(Statement statement)
@@ -199,9 +279,15 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 					LeaveScope();
 					break;
 				}
+			case ExpressionStatement s:
+				GenerateExpression(s.Expression);
+				break;
 			case IfStatement s:
 				var conditionIndex = GenerateExpression(s.Condition);
-				_currentFunction!.Instructions.Add(new JumpIfTrueInstruction(conditionIndex));
+				var jumpInstr = new JumpIfFalseInstruction(conditionIndex);
+				_currentFunction!.Instructions.Add(jumpInstr);
+				GenerateStatement(s.Body);
+				jumpInstr.JumpOffset = _currentFunction.Instructions.Count;
 				break;
 			case ReturnStatement s:
 				{
@@ -209,15 +295,23 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 					if (s.Value == null)
 					{
 						regIndex = _currentFunction!.Registers.Count;
-						_currentFunction.Registers.Add(IrType.Nothing);
+						_currentFunction.Registers.Add(new NothingIrType());
 					}
 					else
-					{
 						regIndex = GenerateExpression(s.Value);
-						_currentFunction!.Registers.Add(IrType.Unknown);
-					}
 
-					_currentFunction.Instructions.Add(new ReturnInstruction(regIndex));
+					_currentFunction!.Instructions.Add(new ReturnInstruction(regIndex));
+					break;
+				}
+			case VariableDeclaration s:
+				{
+					var regIndex = GenerateExpression(s.Initializer);
+					var varType = GetIrTypeByName(s.TypeName);
+
+					// TOOD: Check if regIndex type and varType are different
+					_currentFunction!.Registers[regIndex] = varType;
+
+					CurrentScope!.DeclareVariable(s.Name, regIndex);
 					break;
 				}
 			default:
@@ -240,15 +334,37 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 					{
 						case BinaryOperation.Add:
 							_currentFunction.Instructions.Add(new AddInstruction(leftResultIndex, rightResultIndex, regIndex));
-							_currentFunction.Registers.Add(IrType.Unknown);
+							_currentFunction.Registers.Add(new UnknownIrType());
+							break;
+						case BinaryOperation.Subtract:
+							_currentFunction.Instructions.Add(new SubtractInstruction(leftResultIndex, rightResultIndex, regIndex));
+							_currentFunction.Registers.Add(new UnknownIrType());
 							break;
 						case BinaryOperation.CompareEqual:
 							_currentFunction.Instructions.Add(new CompareEqualInstruction(leftResultIndex, rightResultIndex, regIndex));
-							_currentFunction.Registers.Add(IrType.Bool);
+							_currentFunction.Registers.Add(new BoolIrType());
 							break;
 						default:
 							throw new NotImplementedException(e.Operation.ToString());
 					}
+
+					return regIndex;
+				}
+			case CallExpression e:
+				{
+					if (e.Target is not ReferenceExpression reference)
+						throw new NotImplementedException();
+
+					var regIndex = _currentFunction!.Registers.Count;
+
+					_currentFunction.Registers.Add(new UnknownIrType());
+
+					var args = new int[e.Arguments.Count];
+
+					for (int i = 0; i < e.Arguments.Count; i++)
+						args[i] = GenerateExpression(e.Arguments[i]);
+
+					_currentFunction.Instructions.Add(new CallFunctionByNameInstruction(reference.Name, args, regIndex));
 
 					return regIndex;
 				}
@@ -260,7 +376,7 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 					var regIndex = _currentFunction!.Registers.Count;
 
 					_currentFunction.Instructions.Add(new StoreConstInstruction(value, regIndex));
-					_currentFunction.Registers.Add(IrType.Unknown);
+					_currentFunction.Registers.Add(new IntegerIrType(true, defaultIntSize));
 
 					return regIndex;
 				}
@@ -270,5 +386,64 @@ internal sealed class IrGenerator(IEnumerable<Statement> statements)
 			default:
 				throw new NotImplementedException(Util.StringifyExpression(expression));
 		}
+	}
+
+	private void ResolveFunctionReferences()
+	{
+		foreach (var func in _functions)
+		{
+			for (var i = 0; i < func.Instructions.Count; i++)
+			{
+				if (func.Instructions[i] is not CallFunctionByNameInstruction inst)
+					continue;
+
+				var funcIndex = GetFunctionIndexByName(inst.Name);
+				func.Instructions[i] = new CallFunctionInstruction(funcIndex, inst.ArgRegIndices, inst.DestReg);
+			}
+		}
+	}
+
+	private bool InferTypes()
+	{
+		var changed = false;
+
+		foreach (var func in _functions)
+		{
+			for (var i = 0; i < func.Instructions.Count; i++)
+			{
+				switch (func.Instructions[i])
+				{
+					case CallFunctionInstruction inst:
+						{
+							// Function return type
+							if (func.Registers[inst.DestReg] is UnknownIrType)
+							{
+								func.Registers[inst.DestReg] = GetFunctionByIndex(inst.FuncIndex).ReturnType;
+
+								changed = true;
+							}
+							break;
+						}
+					case SubtractInstruction inst:
+						{
+							var leftType = func.Registers[inst.LeftSourceReg];
+							var rightType = func.Registers[inst.RightSourceReg];
+
+							if (leftType is not IntegerIrType l || rightType is not IntegerIrType r)
+								break;
+
+							var bits = Math.Max(l.Bits, r.Bits);
+							if (l.Signed != r.Signed)
+							{
+								
+							}
+								
+							break;
+						}
+				}
+			}
+		}
+
+		return changed;
 	}
 }
