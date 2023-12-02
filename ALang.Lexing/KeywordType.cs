@@ -6,4 +6,5 @@ public enum KeywordType
 	Return,
 	Var,
 	If,
+	Else,
 }

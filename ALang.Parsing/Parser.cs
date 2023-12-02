@@ -158,7 +158,7 @@ public sealed class Parser(IReadOnlyList<Token> tokens)
 			throw new(GenerateExpectedFoundString("identifier", token));
 
 		var name = nameIdentifier.Lexeme;
-
+		
 		if (!TryReadToken(out token) || token is not PunctuatorToken { Type: PunctuatorType.Colon })
 			throw new(GenerateExpectedFoundString("':'", token));
 
@@ -244,6 +244,14 @@ public sealed class Parser(IReadOnlyList<Token> tokens)
 
 		var endFragment = body.SourceFileFragment;
 
+		if (TryPeekToken(out token) && token is KeywordToken { Type: KeywordType.Else })
+		{
+			TrySkipToken();
+			var elseBody = ParseStatement();
+			endFragment = elseBody.SourceFileFragment;
+			return new(CreateFragment(startFragment, endFragment), condition, body, elseBody);
+		}
+
 		return new(CreateFragment(startFragment, endFragment), condition, body);
 	}
 
@@ -293,8 +301,10 @@ public sealed class Parser(IReadOnlyList<Token> tokens)
 
 	private Expression ParseAssignmentExpression()
 	{
+		// Store current location
 		_indexStack.Push(_index);
 
+		// Not an identifier? Not an assignment: restore index position.
 		if (!TryReadToken(out var token) || token is not IdentifierToken identifier)
 		{
 			_index = _indexStack.Pop();
@@ -303,6 +313,7 @@ public sealed class Parser(IReadOnlyList<Token> tokens)
 
 		var startFragment = token.SourceFileFragment;
 
+		// Not an equal sign? Not an assignment: restore index position.
 		if (!TryReadToken(out token) || token is not PunctuatorToken { Type: PunctuatorType.Equal })
 		{
 			_index = _indexStack.Pop();

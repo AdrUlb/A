@@ -2,9 +2,7 @@
 using ALang.Parsing.Declarations;
 using ALang.Parsing.Expressions;
 using ALang.Parsing.Statements;
-using System;
 using System.Collections.Frozen;
-using System.Net.Http.Headers;
 using System.Numerics;
 
 namespace ALang.Ir;
@@ -50,26 +48,24 @@ internal abstract class IrInstruction()
 
 }
 
-internal sealed class AddInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
+internal abstract class BinaryOperationInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
 {
 	public readonly int LeftSourceReg = leftSourceReg;
 	public readonly int RightSourceReg = rightSourceReg;
 	public readonly int DestReg = destReg;
 }
 
-internal sealed class SubtractInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
-{
-	public readonly int LeftSourceReg = leftSourceReg;
-	public readonly int RightSourceReg = rightSourceReg;
-	public readonly int DestReg = destReg;
-}
+internal sealed class AddInstruction(int leftSourceReg, int rightSourceReg, int destReg)
+	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
+{ }
 
-internal sealed class CompareEqualInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
-{
-	public readonly int LeftSourceReg = leftSourceReg;
-	public readonly int RightSourceReg = rightSourceReg;
-	public readonly int DestReg = destReg;
-}
+internal sealed class SubtractInstruction(int leftSourceReg, int rightSourceReg, int destReg)
+	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
+{ }
+
+internal sealed class CompareEqualInstruction(int leftSourceReg, int rightSourceReg, int destReg)
+	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
+{ }
 
 internal sealed class StoreArgumentInstruction(int argumentIndex, int destReg) : IrInstruction
 {
@@ -83,10 +79,25 @@ internal sealed class StoreConstInstruction(BigInteger value, int destReg) : IrI
 	public readonly int DestReg = destReg;
 }
 
-internal sealed class JumpIfFalseInstruction(int sourceReg) : IrInstruction
+internal sealed class CondBranchInstruction(int sourceReg) : IrInstruction
 {
-	public int JumpOffset = 0;
+	public int TrueBranch = -1;
+	public int FalseBranch = -1;
 	public readonly int SourceReg = sourceReg;
+}
+
+internal sealed class PhiInstruction(int branch1, int reg1, int branch2, int reg2, int destReg) : IrInstruction
+{
+	public int Branch1 = branch1;
+	public int Reg1 = reg1;
+	public int Branch2 = branch2;
+	public int Reg2 = reg2;
+	public int DestReg = destReg;
+}
+
+internal sealed class BranchInstruction : IrInstruction
+{
+	public int Branch = -1;
 }
 
 internal sealed class ReturnInstruction(int sourceReg) : IrInstruction
@@ -120,26 +131,114 @@ internal readonly struct IrVariable(string name, IrType type)
 	public readonly IrType Type = type;
 }
 
+internal sealed class IrBranch(IrBranch? parent)
+{
+	public readonly IrBranch? Parent = parent;
+
+	public readonly Dictionary<string, int> Map = [];
+	public readonly List<(string Name, int NewReg)> Vars = [];
+
+	public void DeclareVariable(string name, int newReg)
+	{
+		Map.Add(name, newReg);
+		Vars.Add((name, newReg));
+	}
+
+	public void Reassign(string name, int newReg)
+	{
+		Map[name] = newReg;
+		for (var i = 0; i < Vars.Count; i++)
+		{
+			if (Vars[i].Name == name)
+			{
+				Vars[i] = (name, newReg);
+				return;
+			}
+		}
+
+		throw new();
+	}
+
+	public bool TryGetVariable(string name, out int newReg)
+	{
+		if (Map.TryGetValue(name, out newReg))
+			return true;
+
+		if (Parent == null)
+			return false;
+
+		return Parent.TryGetVariable(name, out newReg);
+	}
+}
+
 internal sealed class IrScope(IrScope? parent)
 {
 	public readonly IrScope? Parent = parent;
 
-	public readonly Dictionary<string, int> variables = [];
+	public readonly Dictionary<string, int> Variables = [];
 
-	public void DeclareVariable(string name, int registerIndex)
+	private IrBranch? branch = null;
+
+	public void BeginBranch()
 	{
-		variables.Add(name, registerIndex);
+		branch = new(branch);
 	}
 
-	public int GetVariableRegister(string name)
+	public IrBranch EndBranch()
 	{
-		if (variables.TryGetValue(name, out var index))
-			return index;
+		var b = branch!;
+		branch = b.Parent;
+		return b;
+	}
+
+	public void DeclareVariable(string name, int register)
+	{
+		Variables.Add(name, register);
+	}
+
+	public void ReassignVariable(string name, int register)
+	{
+		if (branch != null)
+		{
+			if (!branch.Map.ContainsKey(name))
+				branch.DeclareVariable(name, register);
+			else
+				branch.Reassign(name, register);
+			return;
+		}
+
+		if (Variables.ContainsKey(name))
+		{
+			Variables[name] = register;
+			return;
+		}
 
 		if (Parent == null)
 			throw new("Variable not declared.");
 
-		return Parent.GetVariableRegister(name);
+		Parent.ReassignVariable(name, register);
+	}
+
+	public int GetVariable(string name)
+	{
+		int ret;
+
+		if (Variables.TryGetValue(name, out var index))
+		{
+			ret = index;
+		}
+		else
+		{
+			if (Parent == null)
+				throw new("Variable not declared.");
+
+			ret = Parent.GetVariable(name);
+		}
+
+		if (branch != null && branch.TryGetVariable(name, out var value))
+			return value;
+
+		return ret;
 	}
 }
 
@@ -148,8 +247,9 @@ internal sealed class IrFunction(string name, IrType returnType, IrFunctionParam
 	public readonly string Name = name;
 	public IrType ReturnType = returnType;
 	public readonly IrFunctionParameter[] Parameters = parameters;
-	public readonly List<IrInstruction> Instructions = [];
 	public readonly List<IrType> Registers = [];
+	public readonly List<IrInstruction> Instructions = [];
+	public readonly List<int> Branches = [];
 
 	private int FindParameterIndex(string name)
 	{
@@ -206,12 +306,12 @@ internal sealed class IrGenerator
 
 	IrFunction printFunc = new("print", new NothingIrType(), [new IrFunctionParameter("num", new IntegerIrType(false, 16))]);
 
-	private IrFunction GetFunctionByIndex(int índex)
+	private IrFunction GetFunctionByIndex(int index)
 	{
-		return índex switch
+		return index switch
 		{
 			-1 => printFunc,
-			_ => _functions[índex],
+			_ => _functions[index],
 		};
 	}
 
@@ -284,10 +384,82 @@ internal sealed class IrGenerator
 				break;
 			case IfStatement s:
 				var conditionIndex = GenerateExpression(s.Condition);
-				var jumpInstr = new JumpIfFalseInstruction(conditionIndex);
-				_currentFunction!.Instructions.Add(jumpInstr);
+				var branchInstr = new CondBranchInstruction(conditionIndex);
+				var branchEndTrueInstr = new BranchInstruction();
+				var branchEndFalseInstr = new BranchInstruction();
+				_currentFunction!.Instructions.Add(branchInstr);
+
+				branchInstr.TrueBranch = _currentFunction.Branches.Count;
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
+				CurrentScope!.BeginBranch();
 				GenerateStatement(s.Body);
-				jumpInstr.JumpOffset = _currentFunction.Instructions.Count;
+				_currentFunction!.Instructions.Add(branchEndTrueInstr);
+				var trueBranch = CurrentScope.EndBranch();
+
+				branchInstr.FalseBranch = _currentFunction.Branches.Count;
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
+				CurrentScope.BeginBranch();
+				if (s.ElseBody != null)
+				{
+					GenerateStatement(s.ElseBody);
+				}
+				_currentFunction!.Instructions.Add(branchEndFalseInstr);
+				var falseBranch = CurrentScope.EndBranch();
+
+				branchEndTrueInstr.Branch = _currentFunction.Branches.Count;
+
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
+				var trueEndBranch = branchEndTrueInstr.Branch;
+				var trueCombineBranchInstr = new BranchInstruction();
+				_currentFunction!.Instructions.Add(trueCombineBranchInstr);
+
+				branchEndFalseInstr.Branch = _currentFunction.Branches.Count;
+
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
+				var falseEndBranch = branchEndFalseInstr.Branch;
+				var falseCombineBranchInstr = new BranchInstruction();
+				_currentFunction!.Instructions.Add(falseCombineBranchInstr);
+
+				if (trueCombineBranchInstr != null)
+					trueCombineBranchInstr.Branch = _currentFunction.Branches.Count;
+
+				if (falseCombineBranchInstr != null)
+					falseCombineBranchInstr.Branch = _currentFunction.Branches.Count;
+
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
+
+				var phis = new Dictionary<string, PhiInstruction>();
+
+				foreach (var (name, newReg) in trueBranch.Vars)
+				{
+					var oldReg = CurrentScope.GetVariable(name);
+					var type = _currentFunction.Registers[oldReg];
+					var phiResultReg = _currentFunction.Registers.Count;
+					_currentFunction.Registers.Add(type);
+					var phi = new PhiInstruction(trueEndBranch, newReg, falseEndBranch, oldReg, phiResultReg);
+					phis.Add(name, phi);
+					CurrentScope.ReassignVariable(name, phiResultReg);
+					_currentFunction.Instructions.Add(phi);
+				}
+
+				foreach (var (name, newReg) in falseBranch.Vars)
+				{
+					if (phis.TryGetValue(name, out var phi))
+					{
+						phi.Reg2 = newReg;
+					}
+					else
+					{
+						var oldReg = CurrentScope.GetVariable(name);
+						var type = _currentFunction.Registers[oldReg];
+						var phiResultReg = _currentFunction.Registers.Count;
+						_currentFunction.Registers.Add(type);
+						phi = new PhiInstruction(trueEndBranch, oldReg, falseEndBranch, newReg, phiResultReg);
+						phis.Add(name, phi);
+						CurrentScope.ReassignVariable(name, phiResultReg);
+						_currentFunction.Instructions.Add(phi);
+					}
+				}
 				break;
 			case ReturnStatement s:
 				{
@@ -323,6 +495,12 @@ internal sealed class IrGenerator
 	{
 		switch (expression)
 		{
+			case AssignmentExpression e:
+				{
+					var index = GenerateExpression(e.Value);
+					CurrentScope!.ReassignVariable(e.Target, index);
+					return index;
+				}
 			case BinaryExpression e:
 				{
 					var leftResultIndex = GenerateExpression(e.Left);
@@ -381,7 +559,7 @@ internal sealed class IrGenerator
 					return regIndex;
 				}
 			case ReferenceExpression e:
-				var registerIndex = CurrentScope!.GetVariableRegister(e.Name);
+				var registerIndex = CurrentScope!.GetVariable(e.Name);
 				return registerIndex;
 			default:
 				throw new NotImplementedException(Util.StringifyExpression(expression));
@@ -424,20 +602,27 @@ internal sealed class IrGenerator
 							}
 							break;
 						}
-					case SubtractInstruction inst:
+					case BinaryOperationInstruction inst:
 						{
-							var leftType = func.Registers[inst.LeftSourceReg];
-							var rightType = func.Registers[inst.RightSourceReg];
-
-							if (leftType is not IntegerIrType l || rightType is not IntegerIrType r)
-								break;
-
-							var bits = Math.Max(l.Bits, r.Bits);
-							if (l.Signed != r.Signed)
+							if (inst is AddInstruction or SubtractInstruction)
 							{
-								
+								var leftType = func.Registers[inst.LeftSourceReg];
+								var rightType = func.Registers[inst.RightSourceReg];
+								var destType = func.Registers[inst.DestReg];
+
+								if (leftType is not IntegerIrType l || rightType is not IntegerIrType r || destType is not UnknownIrType)
+									break;
+
+								var bits = Math.Max(l.Bits, r.Bits);
+								var signed = l.Signed || r.Signed;
+
+								if ((l.Bits > r.Bits && !l.Signed) || (r.Bits > l.Bits && !r.Signed))
+									bits <<= 1;
+
+								func.Registers[inst.DestReg] = new IntegerIrType(signed, bits);
+
+								changed = true;
 							}
-								
 							break;
 						}
 				}

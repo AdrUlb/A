@@ -7,7 +7,7 @@ variableDeclaration = "var", identifier, ':', identifier, '=' expression, ';' ;
 statement = blockStatement | returnStatement | ifStatement | expressionStatement ;
 blockStatement = '{', { statement }, '}' ;
 returnStatement = "return" [ expression ] ';' ;
-ifStatement = "if", '(', expression, ')', statement
+ifStatement = "if", '(', expression, ')', statement, [ "else", statement ] ;
 expressionStatement = expression, ';' ;
 
 expression = assignmentExpression ;

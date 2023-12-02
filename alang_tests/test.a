@@ -5,13 +5,16 @@
 
 func fib(a: u16): u16
 {
+	var ret: u16 = 0;
+
 	if (a == 0)
-		return 0;
-
-	if (a == 1)
-		return 1;
-
-	return fib(a - 1) + fib(a - 2);
+		ret = 0;
+	else if (a == 1)
+		ret = 1;
+	else
+		ret = fib(a - 1) + fib(a - 2);
+		
+	return ret;
 }
 
 /*func printInt(value: u16)

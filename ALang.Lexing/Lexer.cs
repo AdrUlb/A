@@ -16,6 +16,7 @@ public sealed class Lexer(SourceFile file)
 		{ "return", KeywordType.Return },
 		{ "var", KeywordType.Var },
 		{ "if", KeywordType.If },
+		{ "else", KeywordType.Else},
 	}.ToFrozenDictionary();
 
 	private static readonly FrozenDictionary<string, PunctuatorType> _punctuators = new Dictionary<string, PunctuatorType>
