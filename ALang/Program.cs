@@ -85,10 +85,10 @@ static void RunFile(string filePath)
 				case StoreConstInstruction inst:
 					Console.WriteLine($"    0x{j:X4}: reg{inst.DestReg} <- {inst.Value}");
 					break;
-				case AddInstruction inst:
+				case AddBinOpInstruction inst:
 					Console.WriteLine($"    0x{j:X4}: reg{inst.DestReg} <- reg{inst.LeftSourceReg} + reg{inst.RightSourceReg}");
 					break;
-				case SubtractInstruction inst:
+				case SubBinOpInstruction inst:
 					Console.WriteLine($"    0x{j:X4}: reg{inst.DestReg} <- reg{inst.LeftSourceReg} - reg{inst.RightSourceReg}");
 					break;
 				default:

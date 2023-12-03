@@ -3,7 +3,7 @@
 	return a + b;
 }*/
 
-func fib(a: u16): u16
+/*func fib(a: u16): u16
 {
 	var ret: u16 = 0;
 
@@ -13,16 +13,27 @@ func fib(a: u16): u16
 		ret = 1;
 	else
 		ret = fib(a - 1) + fib(a - 2);
-		
-	return ret;
-}
 
-/*func printInt(value: u16)
+	return ret;
+}*/
+
+func printInt(value: u16)
 {
 	print(value);
-}*/
+}
+
+func fib(a: u16): u16
+{
+	if (a == 0)
+		return 0;
+
+	if (a == 1)
+		return 1;
+
+	return fib(a - 1) + fib(a - 2);
+}
 
 func main()
 {
-	print(fib(4));
+	printInt(fib(4));
 }

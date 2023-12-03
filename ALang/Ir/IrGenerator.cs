@@ -7,118 +7,6 @@ using System.Numerics;
 
 namespace ALang.Ir;
 
-internal interface IrType
-{
-
-}
-
-internal struct UnknownIrType : IrType
-{
-	public override readonly string ToString() => "unknown";
-}
-internal struct IntegerIrType : IrType
-{
-	public bool Signed = true;
-	public int Bits = -1;
-
-	public IntegerIrType()
-	{
-
-	}
-
-	public IntegerIrType(bool signed, int bits)
-	{
-		Signed = signed;
-		Bits = bits;
-	}
-
-	public override readonly string ToString() => $"{(Signed ? 'i' : 'u')}{(Bits >= 0 ? Bits.ToString() : "?")}";
-}
-internal struct NothingIrType : IrType
-{
-	public override readonly string ToString() => "nothing";
-}
-internal struct BoolIrType : IrType
-{
-	public override readonly string ToString() => "bool";
-}
-
-internal abstract class IrInstruction()
-{
-
-}
-
-internal abstract class BinaryOperationInstruction(int leftSourceReg, int rightSourceReg, int destReg) : IrInstruction
-{
-	public readonly int LeftSourceReg = leftSourceReg;
-	public readonly int RightSourceReg = rightSourceReg;
-	public readonly int DestReg = destReg;
-}
-
-internal sealed class AddInstruction(int leftSourceReg, int rightSourceReg, int destReg)
-	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
-{ }
-
-internal sealed class SubtractInstruction(int leftSourceReg, int rightSourceReg, int destReg)
-	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
-{ }
-
-internal sealed class CompareEqualInstruction(int leftSourceReg, int rightSourceReg, int destReg)
-	: BinaryOperationInstruction(leftSourceReg, rightSourceReg, destReg)
-{ }
-
-internal sealed class StoreArgumentInstruction(int argumentIndex, int destReg) : IrInstruction
-{
-	public readonly int ArgumentIndex = argumentIndex;
-	public readonly int DestReg = destReg;
-}
-
-internal sealed class StoreConstInstruction(BigInteger value, int destReg) : IrInstruction
-{
-	public readonly BigInteger Value = value;
-	public readonly int DestReg = destReg;
-}
-
-internal sealed class CondBranchInstruction(int sourceReg) : IrInstruction
-{
-	public int TrueBranch = -1;
-	public int FalseBranch = -1;
-	public readonly int SourceReg = sourceReg;
-}
-
-internal sealed class PhiInstruction(int branch1, int reg1, int branch2, int reg2, int destReg) : IrInstruction
-{
-	public int Branch1 = branch1;
-	public int Reg1 = reg1;
-	public int Branch2 = branch2;
-	public int Reg2 = reg2;
-	public int DestReg = destReg;
-}
-
-internal sealed class BranchInstruction : IrInstruction
-{
-	public int Branch = -1;
-}
-
-internal sealed class ReturnInstruction(int sourceReg) : IrInstruction
-{
-	public readonly int SourceReg = sourceReg;
-}
-
-internal sealed class CallFunctionInstruction(int funcIndex, int[] argRegIndices, int destReg) : IrInstruction
-{
-	public readonly int FuncIndex = funcIndex;
-	public readonly int[] ArgRegIndices = argRegIndices;
-	public readonly int DestReg = destReg;
-}
-
-internal sealed class CallFunctionByNameInstruction(string name, int[] argRegIndices, int destReg) : IrInstruction
-{
-	public readonly string Name = name;
-	public readonly int[] ArgRegIndices = argRegIndices;
-	public readonly int DestReg = destReg;
-}
-
 internal readonly struct IrFunctionParameter(string name, IrType type)
 {
 	public readonly string Name = name;
@@ -279,6 +167,8 @@ internal sealed class IrGenerator
 
 	private IrFunction? _currentFunction = null;
 
+	private readonly IrFunction printFunc = new("print", new NothingIrType(), [new IrFunctionParameter("num", new IntegerIrType(false, 16))]);
+
 	private static IrType GetIrTypeByName(string? name)
 	{
 		if (name == null)
@@ -303,8 +193,6 @@ internal sealed class IrGenerator
 
 		throw new($"Function '{name}' not found.");
 	}
-
-	IrFunction printFunc = new("print", new NothingIrType(), [new IrFunctionParameter("num", new IntegerIrType(false, 16))]);
 
 	private IrFunction GetFunctionByIndex(int index)
 	{
@@ -383,53 +271,41 @@ internal sealed class IrGenerator
 				GenerateExpression(s.Expression);
 				break;
 			case IfStatement s:
-				var conditionIndex = GenerateExpression(s.Condition);
-				var branchInstr = new CondBranchInstruction(conditionIndex);
-				var branchEndTrueInstr = new BranchInstruction();
-				var branchEndFalseInstr = new BranchInstruction();
-				_currentFunction!.Instructions.Add(branchInstr);
+				var conditionResultIndex = GenerateExpression(s.Condition);
+				var conditionBranchInstr = new CondBranchInstruction(conditionResultIndex);
+				_currentFunction!.Instructions.Add(conditionBranchInstr);
 
-				branchInstr.TrueBranch = _currentFunction.Branches.Count;
-				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
-				CurrentScope!.BeginBranch();
-				GenerateStatement(s.Body);
+				var branchEndTrueInstr = new BranchInstruction(); // Instruction that jumps back after if body is done
+				var branchEndFalseInstr = new BranchInstruction(); // Instruction that jumps back after else body is done
+
+				// Generate the true branch
+				conditionBranchInstr.TrueBranch = _currentFunction.Branches.Count; // True branch begins here
+				_currentFunction.Branches.Add(_currentFunction.Instructions.Count); // Add branch to list
+				CurrentScope!.BeginBranch(); // Branch begins, filter variable modifications
+				GenerateStatement(s.Body); // Generate the if body
+				var trueEndBranch = _currentFunction.Branches.Count - 1; // Last branch is the one phi needs
 				_currentFunction!.Instructions.Add(branchEndTrueInstr);
 				var trueBranch = CurrentScope.EndBranch();
 
-				branchInstr.FalseBranch = _currentFunction.Branches.Count;
+				// Generate the else branch, works like the true branch, except the body is optional
+				conditionBranchInstr.FalseBranch = _currentFunction.Branches.Count;
 				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
 				CurrentScope.BeginBranch();
 				if (s.ElseBody != null)
-				{
 					GenerateStatement(s.ElseBody);
-				}
+				var falseEndBranch = _currentFunction.Branches.Count - 1;
 				_currentFunction!.Instructions.Add(branchEndFalseInstr);
 				var falseBranch = CurrentScope.EndBranch();
 
+				// Set jump target for true/false body branch back
 				branchEndTrueInstr.Branch = _currentFunction.Branches.Count;
-
-				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
-				var trueEndBranch = branchEndTrueInstr.Branch;
-				var trueCombineBranchInstr = new BranchInstruction();
-				_currentFunction!.Instructions.Add(trueCombineBranchInstr);
-
 				branchEndFalseInstr.Branch = _currentFunction.Branches.Count;
-
-				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
-				var falseEndBranch = branchEndFalseInstr.Branch;
-				var falseCombineBranchInstr = new BranchInstruction();
-				_currentFunction!.Instructions.Add(falseCombineBranchInstr);
-
-				if (trueCombineBranchInstr != null)
-					trueCombineBranchInstr.Branch = _currentFunction.Branches.Count;
-
-				if (falseCombineBranchInstr != null)
-					falseCombineBranchInstr.Branch = _currentFunction.Branches.Count;
-
 				_currentFunction.Branches.Add(_currentFunction.Instructions.Count);
 
+				// Generate phi instructions for all variables that were modified
 				var phis = new Dictionary<string, PhiInstruction>();
 
+				// Add phi instructions for variables that were modified in true branch
 				foreach (var (name, newReg) in trueBranch.Vars)
 				{
 					var oldReg = CurrentScope.GetVariable(name);
@@ -442,6 +318,7 @@ internal sealed class IrGenerator
 					_currentFunction.Instructions.Add(phi);
 				}
 
+				// Add phi instructions for variables that were modified in false branch or add false-branch-register to existing phi instructions
 				foreach (var (name, newReg) in falseBranch.Vars)
 				{
 					if (phis.TryGetValue(name, out var phi))
@@ -511,11 +388,11 @@ internal sealed class IrGenerator
 					switch (e.Operation)
 					{
 						case BinaryOperation.Add:
-							_currentFunction.Instructions.Add(new AddInstruction(leftResultIndex, rightResultIndex, regIndex));
+							_currentFunction.Instructions.Add(new AddBinOpInstruction(leftResultIndex, rightResultIndex, regIndex));
 							_currentFunction.Registers.Add(new UnknownIrType());
 							break;
 						case BinaryOperation.Subtract:
-							_currentFunction.Instructions.Add(new SubtractInstruction(leftResultIndex, rightResultIndex, regIndex));
+							_currentFunction.Instructions.Add(new SubBinOpInstruction(leftResultIndex, rightResultIndex, regIndex));
 							_currentFunction.Registers.Add(new UnknownIrType());
 							break;
 						case BinaryOperation.CompareEqual:
@@ -602,9 +479,9 @@ internal sealed class IrGenerator
 							}
 							break;
 						}
-					case BinaryOperationInstruction inst:
+					case BinOpInstruction inst:
 						{
-							if (inst is AddInstruction or SubtractInstruction)
+							if (inst is AddBinOpInstruction or SubBinOpInstruction)
 							{
 								var leftType = func.Registers[inst.LeftSourceReg];
 								var rightType = func.Registers[inst.RightSourceReg];
