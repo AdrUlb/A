@@ -55,7 +55,7 @@ static void RunFile(string filePath)
 					Console.WriteLine($"  br{k}:");
 			}
 
-			IrInstruction instr = f.Instructions[j];
+			var instr = f.Instructions[j];
 			switch (instr)
 			{
 				case CompareEqualInstruction inst:
